@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceName: {{ .Release.Name }}
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations: 
+      {{- if .Values.networks }}
+        k8s.v1.cni.cncf.io/networks: {{ .Values.networks | toJson | quote }}
+      {{- else }}
+        {}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}
+    spec:
+      restartPolicy: Always
+      
+      {{- if .Values.node_selector }}
+      nodeSelector:
+        {{ .Values.node_selector | toYaml | indent 8 | trim }}
+      {{- end }}
+      
+      securityContext:
+        sysctls:
+        - name: net.ipv4.ip_forward
+          value: "1"
+      
+      containers:
+      - image: "{{ .Values.image }}"
+        imagePullPolicy: "{{ .Values.image_pull_policy }}"
+        name: firewall
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/gate
+            - ready
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 5
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["NET_ADMIN"]
+        volumeMounts:
+        - name: {{ .Release.Name }}-config
+          mountPath: /etc/config
+        - name: dev-net-tun
+          mountPath: /dev/net/tun
+        resources:
+{{ toYaml .Values.resources | indent 10 }}

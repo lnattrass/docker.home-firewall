@@ -1,0 +1,8 @@
+[template]
+src = "zerotier.conf.tmpl"
+dest = "/etc/zerotier.conf"
+
+keys = [
+  "/"
+]
+reload_cmd = "/bin/s6-svc -wr -r /run/s6/services/zerotier"

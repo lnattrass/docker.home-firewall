@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+source /etc/zerotier.conf
+
+
+
+echo "Deauthing zt networks..."
+# Check/wait for an identity
+ZT_IDENT=$(zerotier-cli info -j | jq -er '.address')
+while [ "$ZT_IDENT" == "" ]; do
+    sleep 5
+    ZT_IDENT=$(zerotier-cli info -j | jq -er '.address')
+done
+
+for i in $ZT_NETWORKS; do
+    /usr/bin/curl -Ss -XDELETE -H "Authorization: bearer ${ZT_APIKEY}" "https://my.zerotier.com/api/network/${i}/member/${ZT_IDENT}"
+done
+echo "Done unregistering..."

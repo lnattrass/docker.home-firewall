@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+set -e
+src_config=/etc/nftables.conf
+dst_config=/run/nftables/ruleset.conf
+
+# Build firewall rules (may not be necessary..)
+mkdir -p /etc/nftables.d /run/nftables
+cat $src_config > $dst_config
+for i in `ls /etc/nftables.d/`; do
+	cat /etc/nftables.d/$i >> $dst_config
+done
+
+# Check mode?
+case "$1" in
+  "check")
+    nft -f -c $dst_config
+    exit 0
+  ;;
+esac
+
+# Load firewall
+nft -f $dst_config
+
+# Enable forwarding
+echo 1 > /proc/sys/net/ipv4/ip_forward

@@ -1,0 +1,66 @@
+#!/bin/bash
+#
+
+#set -x
+source /etc/zerotier.conf
+
+# Startup zerotier
+if [ "$ZT_APIKEY" == "" ]; then
+	echo "ZT_APIKEY is not set."
+	exit 1
+fi
+
+if [ "$ZT_NETWORKS" == "" ]; then
+	echo "ZT_NETWORKS is not set"
+	exit 1
+fi
+
+for i in $ZT_NETWORKS; do
+
+cat <<EOF > /var/lib/zerotier-one/networks.d/$i.local.conf
+allowManaged=1
+allowGlobal=0
+allowDefault=0
+EOF
+touch /var/lib/zerotier-one/networks.d/$i.conf
+
+done
+
+# Start ZT-one in the background
+zerotier-one &
+ZTPID=$!
+sleep 1
+
+# Wait for an identity
+ZT_IDENT=$(zerotier-cli info -j | jq -er '.address')
+while [ "$ZT_IDENT" == "" ]; do
+    sleep 5
+    ZT_IDENT=$(zerotier-cli info -j | jq -er '.address')
+done
+
+# Got an identity:
+echo "Got an identity: $ZT_IDENT"
+
+# Join networks in $ZT_NETWORKS
+for i in $ZT_NETWORKS; do
+  # Wait for registration
+  curl -Sso /dev/null --fail -H "Authorization: bearer ${ZT_APIKEY}" "https://my.zerotier.com/api/network/${i}/member/$ZT_IDENT"
+  while [ $? -ne 0 ]; do
+    echo "ZeroTier not yet registered against network $i"
+    sleep 1
+    curl -Sso /dev/null --fail -H "Authorization: bearer ${ZT_APIKEY}" "https://my.zerotier.com/api/network/${i}/member/$ZT_IDENT"
+  done
+
+  # Registered...
+  echo "Approving registration..."
+  # Approve registration and configure ZeroTier
+  POSTDATA='{ "name": "{{HOSTNAME}}", "config": { "authorized": true, "activeBridge": true, "ipAssignments": [ "10.254.0.254" ] }, "hidden": false }'
+  POSTDATA=$(echo $POSTDATA | sed "s/{{HOSTNAME}}/$(hostname)/")
+  curl -Sso /dev/null -XPOST -H "Authorization: bearer $ZT_APIKEY" -d "$POSTDATA" "https://my.zerotier.com/api/network/${i}/member/$ZT_IDENT"
+  if [ $? -eq 0 ]; then
+    echo "Registration approved..."
+  fi
+done
+
+
+fg

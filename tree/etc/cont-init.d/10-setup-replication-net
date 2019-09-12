@@ -1,0 +1,48 @@
+#!/bin/bash -e
+# Template any networking that needs to occur:
+# Should give us an address like  192.168.50.1/24
+
+PATH="$PATH:/usr/local/bin"
+CONFIG="/etc/config/config.yaml"
+
+REPLICATION_SUBNET=$(yq r "$CONFIG" 'network.replication.subnet')
+REPLICATION_INTERFACE=$(yq r "$CONFIG" 'network.replication.interface')
+
+# 10.0.0.0/24
+REPLICATION_NETWORK=$(echo $REPLICATION_SUBNET | cut -f1 -d/)
+REPLICATION_NETWORK_LENGTH=$(echo $REPLICATION_SUBNET | cut -f2 -d/)
+
+# Import some support stuff:
+. /usr/lib/bash-functions/ipcalc
+
+# Get network addr:
+NETWORK_ADDR=$(network $REPLICATION_NETWORK $REPLICATION_NETWORK_LENGTH)
+NETWORK_ADDR=$(ip2int $REPLICATION_NETWORK)
+
+# Generate our static address:
+STS_INDEX=$(echo $HOSTNAME | cut -f2 -d-)
+if ! [ "$STS_INDEX" -eq "$STS_INDEX" ] 2> /dev/null
+then
+    echo "Hostname is invalid - this is designed to work on a StatefulSet."
+    exit 1
+fi
+ADDRESS=$((NETWORK_ADDR + STS_INDEX + 1))
+ADDRESS=$(int2ip $ADDRESS)
+
+# Write out config files
+cat <<EOF > /etc/network/interfaces.d/replication
+auto ${REPLICATION_INTERFACE}
+iface ${REPLICATION_INTERFACE} inet static
+  address ${ADDRESS}/${REPLICATION_SUBNET_PREFIXLEN}
+EOF
+
+# Create a nework state file:
+mkdir -p /run/network
+cat <<EOF > /run/network/state.yaml
+network:
+  replication:
+    address: "${ADDRESS}"
+EOF
+
+# Bring up the interface
+ifup ${REPLICATION_INTERFACE}

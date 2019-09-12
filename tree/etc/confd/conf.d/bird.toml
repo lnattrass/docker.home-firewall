@@ -1,0 +1,6 @@
+[template]
+src = "../../config/bird.conf"
+dest = "/etc/bird.conf"
+
+check_cmd = "/usr/sbin/bird -p"
+reload_cmd = "/usr/bin/killall -HUP bird"

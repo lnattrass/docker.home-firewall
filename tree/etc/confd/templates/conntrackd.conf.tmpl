@@ -1,0 +1,49 @@
+
+Sync {
+  Mode FTFW {
+
+  }
+
+  Multicast {
+    IPv4_address 225.0.0.50
+    Group 3780
+
+    Interface {{getv "/network/replication/interface"}}
+    IPv4_interface {{getv "/network/replication/address"}}
+    
+    SndSocketBuffer 1249280
+    RcvSocketBuffer 1249280
+
+    Checksum on
+  }
+
+  Options {
+    ExpectationSync On
+  }
+}
+
+General {
+  HashSize 32768
+  HashLimit 131072
+
+  LogFile on
+  LockFile /var/lock/conntrack.lock
+  UNIX {
+    Path /var/run/conntrackd.ctl
+  }
+
+  NetlinkBufferSize 2097152
+  NetlinkBufferSizeMaxGrowth 8388608
+
+  Filter From Userspace {
+    Protocol Accept {
+      TCP
+      UDP
+    }
+
+    Address Ignore {
+      IPv4_address 127.0.0.1
+    }
+  }
+}
+

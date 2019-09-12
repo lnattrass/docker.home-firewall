@@ -1,0 +1,14 @@
+apiVersion: v1
+description: Virtual Machine Template
+home: https://github.com/lnattrass/docker.home-firewall
+keywords:
+- firewall
+- ha
+- router
+maintainers:
+- email: lnattrass@gitlab.com
+  name: lnattrass
+name: home-firewall
+sources:
+- https://github.com/lnattrass/docker.home-firewall
+version: 1.0.0

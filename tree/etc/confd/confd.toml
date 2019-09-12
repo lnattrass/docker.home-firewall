@@ -1,0 +1,6 @@
+backend = "file"
+file = [
+  "/etc/config/config.yaml",
+  "/run/network/state.yaml"
+]
+interval = 10

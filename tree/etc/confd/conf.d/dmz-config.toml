@@ -1,0 +1,6 @@
+[template]
+src = "dmz-config.tmpl"
+dest = "/run/network/dmz-config"
+keys = [
+  "/"
+]

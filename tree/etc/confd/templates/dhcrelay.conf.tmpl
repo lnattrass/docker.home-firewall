@@ -1,0 +1,3 @@
+DHCP_UPSTREAM_ADDRESSES="{{ range getvs "/dhcp_helper/upstream/addresses/*" }}{{. }} {{end}}"
+DHCP_UPSTREAM_INTERFACES="{{ range getvs "/dhcp_helper/upstream/interfaces/*" }}-iu {{.}} {{end}}"
+DHCP_DOWNSTREAM_INTERFACES="{{ range getvs "/dhcp_helper/downstream/interfaces/*"}}-id {{.}} {{end}}"

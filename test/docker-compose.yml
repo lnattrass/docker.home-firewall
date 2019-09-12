@@ -1,0 +1,135 @@
+version: "3"
+networks:
+
+  peer-net:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+      - subnet: "10.10.100.0/24"
+
+  side-a-dmz:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "10.123.99.0/24"
+
+  side-a-servers:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: "10.123.0.0/24"
+
+  side-a-clients:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: "10.123.1.0/24"
+
+  side-b-dmz:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: "10.223.99.0/24"
+  
+  side-b-servers:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+      - subnet: "10.223.0.0/24"
+
+  side-b-clients:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+      - subnet: "10.223.1.0/24"
+
+services:
+  a-firewall:
+    image: lnattrass/firewall:latest
+    privileged: true
+    networks:
+      side-a-dmz: {}
+      side-a-servers:
+        ipv4_address: 10.123.0.10
+      side-a-clients:
+        ipv4_address: 10.123.1.10
+    volumes:
+    - ./config:/etc/config
+    
+  a-client:
+    build: ./resources/net-tools
+    privileged: true
+    networks:
+    - side-a-clients
+    entrypoint: [ sh, -c ]
+    volumes:
+    - ./resources/interfaces/a-client:/etc/network/interfaces
+    command: >
+      " ip ad flush dev eth0 
+      && ifup -a
+      && ping 10.123.0.10
+      "
+  
+  a-server:
+    build: ./resources/net-tools
+    privileged: true
+    networks:
+    - side-a-servers
+    entrypoint: [ sh, -c ]
+    volumes:
+    - ./resources/interfaces/a-server:/etc/network/interfaces
+    command: >
+      " ip ad flush dev eth0
+      && ifup -a 
+      && ping 10.123.1.10
+      "
+
+
+  b-firewall:
+    image: lnattrass/firewall:latest
+    privileged: true
+    networks:
+      side-b-dmz: {}
+      side-b-servers:
+        ipv4_address: 10.123.0.10
+      side-b-clients:
+        ipv4_address: 10.123.1.10
+    volumes:
+    - ./config:/etc/config
+    
+  b-client:
+    build: ./resources/net-tools
+    privileged: true
+    networks:
+    - side-b-clients
+    entrypoint: [ sh, -c ]
+    volumes:
+    - ./resources/interfaces/client:/etc/network/interfaces
+    command: >
+      " ip ad flush eth0
+      && ifup -a
+      && ping 10.123.0.10
+      && sleep infinity 
+      
+      "
+  
+  b-server:
+    build: ./resources/net-tools
+    privileged: true
+    networks:
+    - side-b-servers
+    entrypoint: [ sh, -c ]
+    volumes:
+    - ./resources/interfaces/server

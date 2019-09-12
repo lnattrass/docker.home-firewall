@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+
+case "$1" in
+  ready)
+    if [ -f /run/keepalive-state ]; then
+      STATE=$(cat /run/keepalive-state)
+      echo "Currently: $STATE"
+      exit 0
+    fi
+  ;;
+
+  healthy)
+    exit 0  
+  ;;
+esac

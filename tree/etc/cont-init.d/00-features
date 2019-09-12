@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# Setup features/feature flags
+. /etc/config/services.conf 
+
+for svc in $ENABLED_SERVICES; do
+  if [ ! -d /etc/services.d/$svc ]; then
+    echo "Service directory does not exist: /etc/services.d/$svc"
+    continue
+  fi
+  if [ -f /etc/services.d/$svc/down ]; then
+    echo -n "Enabling $svc: "
+    rm /etc/services.d/$svc/down 
+    echo  " Done."
+  fi
+done
+
+for svc in $DISABLED_SERVICES; do
+  if [ ! -d /etc/services.d/$svc ]; then
+    echo "Service directory does not exist: /etc/services.d/$svc"
+    continue
+  fi
+  if [ ! -f /etc/services.d/$svc/down ]; then
+    echo -n "Disabline $svc: "
+    touch /etc/services.d/$svc/down 
+    echo  " Done."
+  fi
+done

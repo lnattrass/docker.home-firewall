@@ -1,0 +1,13 @@
+#!/bin/bash
+set -x
+cd `dirname $0`
+
+docker-compose up -d a-firewall
+docker-compose up -d a-server
+docker-compose up -d a-client
+
+#docker-compose up -d b-firewall
+#docker-compose up -d b-server
+#docker-compose up -d b-client
+
+echo "Do tests..?"

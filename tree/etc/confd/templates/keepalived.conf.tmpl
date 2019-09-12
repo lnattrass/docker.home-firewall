@@ -1,0 +1,28 @@
+global_defs {
+  default_interface {{ getv "/network/replication/interface" }}
+  vrrp_version 3
+  script_user root
+  enable_script_security
+}
+
+vrrp_instance instance-1 {
+  interface {{ getv "/network/replication/interface" }}
+  state BACKUP
+  virtual_router_id 51
+  priority 200
+  nopreempt
+
+  notify_master "/usr/local/bin/dispatch-state.sh primary"
+  notify_backup "/usr/local/bin/dispatch-state.sh backup"
+  notify_fault "/usr/local/bin/dispatch-state.sh fault"
+
+  track_interface {
+    katrack0
+  }
+
+  virtual_ipaddress {
+    {{ range getvs "/virtual_ipaddress/*" -}}
+    {{.}}
+    {{ end -}}
+  }
+}
