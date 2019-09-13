@@ -1,12 +1,13 @@
 #!/bin/bash
 #
 
-#set -x
+# This is the _most_ disgusting script ever.
+
 source /etc/zerotier.conf
 
 # Startup zerotier
-if [ "$ZT_APIKEY" == "" ]; then
-	echo "ZT_APIKEY is not set."
+if [ "$ZT_API_KEY" == "" ]; then
+	echo "ZT_API_KEY is not set."
 	exit 1
 fi
 
@@ -15,14 +16,19 @@ if [ "$ZT_NETWORKS" == "" ]; then
 	exit 1
 fi
 
-for i in $ZT_NETWORKS; do
+# Ensure directory exists
+mkdir -p /var/lib/zerotier-one/networks.d/
 
-cat <<EOF > /var/lib/zerotier-one/networks.d/$i.local.conf
+# Join networks in $ZT_NETWORKS
+for i in $ZT_NETWORKS; do
+network=$(echo $i | cut -f1 -d=)
+address=$(echo $i | cut -f2 -d=)
+cat <<EOF > /var/lib/zerotier-one/networks.d/${network}.local.conf
 allowManaged=1
 allowGlobal=0
 allowDefault=0
 EOF
-touch /var/lib/zerotier-one/networks.d/$i.conf
+touch /var/lib/zerotier-one/networks.d/${network}.conf
 
 done
 
@@ -43,24 +49,24 @@ echo "Got an identity: $ZT_IDENT"
 
 # Join networks in $ZT_NETWORKS
 for i in $ZT_NETWORKS; do
-  # Wait for registration
-  curl -Sso /dev/null --fail -H "Authorization: bearer ${ZT_APIKEY}" "https://my.zerotier.com/api/network/${i}/member/$ZT_IDENT"
-  while [ $? -ne 0 ]; do
-    echo "ZeroTier not yet registered against network $i"
-    sleep 1
-    curl -Sso /dev/null --fail -H "Authorization: bearer ${ZT_APIKEY}" "https://my.zerotier.com/api/network/${i}/member/$ZT_IDENT"
-  done
+  network=$(echo $i | cut -f1 -d=)
+  address=$(echo $i | cut -f2 -d=)
 
   # Registered...
   echo "Approving registration..."
   # Approve registration and configure ZeroTier
-  POSTDATA='{ "name": "{{HOSTNAME}}", "config": { "authorized": true, "activeBridge": true, "ipAssignments": [ "10.254.0.254" ] }, "hidden": false }'
-  POSTDATA=$(echo $POSTDATA | sed "s/{{HOSTNAME}}/$(hostname)/")
-  curl -Sso /dev/null -XPOST -H "Authorization: bearer $ZT_APIKEY" -d "$POSTDATA" "https://my.zerotier.com/api/network/${i}/member/$ZT_IDENT"
+  POSTDATA='{ "name": "{{HOSTNAME}}", "config": { "authorized": true, "activeBridge": true, "ipAssignments": [ "{{IPADDR}}" ] }, "hidden": false }'
+  POSTDATA=$(echo $POSTDATA | sed "s/{{HOSTNAME}}/$(hostname)/" | sed "s/{{IPADDR}}/${address}/")
+  false
+  # Retry forever logic
+  while [ $? -ne 0 ]; do
+    curl -Sso /dev/null -XPOST -H "Authorization: bearer $ZT_API_KEY" -d "$POSTDATA" "https://my.zerotier.com/api/network/${network}/member/$ZT_IDENT"
+    sleep 5
+  done
   if [ $? -eq 0 ]; then
     echo "Registration approved..."
   fi
 done
 
 
-fg
+wait $ZTPID

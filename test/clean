@@ -4,10 +4,5 @@ cd `dirname $0`
 
 dc="docker-compose -p test-home-fw"
 
-$dc up -d server-a
-$dc up -d client-a
-
-$dc up fw-a
-
-$dc down -t 1
+$dc down -t 1 --remove-orphans
 

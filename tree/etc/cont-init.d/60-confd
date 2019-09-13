@@ -1,9 +1,0 @@
-#!/bin/bash
-#
-
-# Ensure running-config is good:
-mkdir -p /run/network
-touch /run/network/state.yaml
-
-#Template files onetime:
-/usr/local/bin/confd -onetime -sync-only

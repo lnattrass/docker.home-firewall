@@ -1,12 +1,12 @@
 global_defs {
-  default_interface {{ getv "/network/replication/interface" }}
+  default_interface {{ getv "/internal_networks/replication/interface" }}
   vrrp_version 3
   script_user root
   enable_script_security
 }
 
 vrrp_instance instance-1 {
-  interface {{ getv "/network/replication/interface" }}
+  interface {{ getv "/internal_networks/replication/interface" }}
   state BACKUP
   virtual_router_id 51
   priority 200

@@ -7,3 +7,4 @@ ip li sh dev katrack0 &> /dev/null
 [ $? -ne 0 ] && ip li add katrack0 type dummy && ip li set katrack0 up
 
 exec keepalived -lDn -f /etc/keepalived/keepalived.conf 
+

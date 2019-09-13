@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+##
+# Firewall changes shouldn't need to make things failover
+##
+config=/etc/config/nftables.conf
+MD5=""
+while true; do
+  NEWMD5=$(md5sum $config)
+  if [ "$MD5" != "$NEWMD5" ]; then
+    echo "New nftables config detected: ($MD5 != $NEWMD5)"
+    nft -c -f $config
+    if [ $? -ne 0 ]; then
+      echo "Firewall configuration checks failed."
+      echo "Sleeping 30s before trying again."
+      sleep 30
+      continue
+    else
+      nft -f $config
+      if [ $? -ne 0 ]; then
+        echo "Failed to apply firewall configuration."
+        echo "Sleeping 30s before trying again."
+        sleep 30
+        continue
+      else
+        # Success
+        MD5=$NEWMD5
+        echo "nftables: config applied successfully."
+      fi
+    fi
+  fi
+  sleep 5
+done

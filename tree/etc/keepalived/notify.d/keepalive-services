@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+
+# 
+. /etc/keepalived/services.conf
+
+if [ -f /run/keepalived-services.conf ]; then
+  . /run/keepalived-services.conf
+else
+  echo "running keepalived-services are missing." 
+fi
+
+
+case "$1" in
+  primary)
+    for svc in $KEEPALIVED_SERVICES; do s6-svc -u /run/s6/services/$svc; done
+    ;;
+  backup)
+    for svc in $KEEPALIVED_SERVICES; do s6-svc -d /run/s6/services/$svc; done
+    ;;
+  fault)
+    for svc in $KEEPALIVED_SERVICES; do s6-svc -d /run/s6/services/$svc; done
+    ;;
+  *)
+    logger "ERROR: unknown state transition"
+    echo "Usage: $0 {primary|backup|fault}"
+    exit 1
+    ;;
+esac
+
+exit 0

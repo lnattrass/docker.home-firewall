@@ -1,135 +1,127 @@
 version: "3"
 networks:
 
+  k8s-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: "10.20.0.0/12"
+
+  replication-net:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+      - subnet: "10.192.101.0/24"
+
   peer-net:
     driver: bridge
     internal: true
     ipam:
       driver: default
       config:
-      - subnet: "10.10.100.0/24"
+      - subnet: "10.192.100.0/24"
 
-  side-a-dmz:
+  dmz-A:
     driver: bridge
     ipam:
       driver: default
       config:
-        - subnet: "10.123.99.0/24"
+        - subnet: "1.1.1.0/24"
 
-  side-a-servers:
-    driver: bridge
-    internal: true
-    ipam:
-      driver: default
-      config:
-        - subnet: "10.123.0.0/24"
-
-  side-a-clients:
+  servers-A:
     driver: bridge
     internal: true
     ipam:
       driver: default
       config:
-        - subnet: "10.123.1.0/24"
+        - subnet: "192.168.100.0/24"
 
-  side-b-dmz:
+  clients-A:
     driver: bridge
+    internal: true
     ipam:
       driver: default
       config:
-      - subnet: "10.223.99.0/24"
+        - subnet: "192.168.105.0/24"
+
+  # dmz-B:
+  #   driver: bridge
+  #   ipam:
+  #     driver: default
+  #     config:
+  #     - subnet: "1.2.2.0/24"
   
-  side-b-servers:
-    driver: bridge
-    internal: true
-    ipam:
-      driver: default
-      config:
-      - subnet: "10.223.0.0/24"
+  # servers-B:
+  #   driver: bridge
+  #   internal: true
+  #   ipam:
+  #     driver: default
+  #     config:
+  #     - subnet: "192.168.100.0/24"
 
-  side-b-clients:
-    driver: bridge
-    internal: true
-    ipam:
-      driver: default
-      config:
-      - subnet: "10.223.1.0/24"
+  # clients-B:
+  #   driver: bridge
+  #   internal: true
+  #   ipam:
+  #     driver: default
+  #     config:
+  #     - subnet: "192.168.105.0/24"
 
 services:
-  a-firewall:
-    image: lnattrass/firewall:latest
+  fw-a:
+    image: lnattrass-fwtest:latest
     privileged: true
     networks:
-      side-a-dmz: {}
-      side-a-servers:
-        ipv4_address: 10.123.0.10
-      side-a-clients:
-        ipv4_address: 10.123.1.10
+      k8s-net: {}
+      dmz-A: {}
+      servers-A: {}
+      clients-A: {}
+      replication-net: {}
+      peer-net: {}
     volumes:
     - ./config:/etc/config
-    
-  a-client:
-    build: ./resources/net-tools
+
+  fw-b:
+    image: lnattrass-fwtest:latest
     privileged: true
     networks:
-    - side-a-clients
-    entrypoint: [ sh, -c ]
+      k8s-net: {}
+      dmz-A: {}
+      servers-A: {}
+      clients-A: {}
+      replication-net: {}
+      peer-net: {}
     volumes:
-    - ./resources/interfaces/a-client:/etc/network/interfaces
-    command: >
-      " ip ad flush dev eth0 
-      && ifup -a
-      && ping 10.123.0.10
-      "
+    - ./config:/etc/config
   
-  a-server:
+  server-a:
     build: ./resources/net-tools
     privileged: true
     networks:
-    - side-a-servers
+    - servers-A
     entrypoint: [ sh, -c ]
     volumes:
     - ./resources/interfaces/a-server:/etc/network/interfaces
     command: >
       " ip ad flush dev eth0
       && ifup -a 
-      && ping 10.123.1.10
+      && exec ping 192.168.100.10
       "
 
-
-  b-firewall:
-    image: lnattrass/firewall:latest
-    privileged: true
-    networks:
-      side-b-dmz: {}
-      side-b-servers:
-        ipv4_address: 10.123.0.10
-      side-b-clients:
-        ipv4_address: 10.123.1.10
-    volumes:
-    - ./config:/etc/config
-    
-  b-client:
+ 
+  client-a:
     build: ./resources/net-tools
     privileged: true
     networks:
-    - side-b-clients
+    - clients-A
     entrypoint: [ sh, -c ]
     volumes:
-    - ./resources/interfaces/client:/etc/network/interfaces
+    - ./resources/interfaces/a-server:/etc/network/interfaces
     command: >
-      " ip ad flush eth0
-      && ifup -a
-      && ping 10.123.0.10
-      && sleep infinity 
-      
+      " ip ad flush dev eth0
+      && ifup -a 
+      && exec ping 192.168.105.10
       "
-  
-  b-server:
-    build: ./resources/net-tools
-    privileged: true
-    networks:
-    - side-b-servers
-    entrypoint: [ sh, -c ]
-    volumes:
-    - ./resources/interfaces/server

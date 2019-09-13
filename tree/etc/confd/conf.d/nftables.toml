@@ -1,6 +1,0 @@
-[template]
-src = "../../config/nftables.conf"
-dest = "/etc/nftables.conf"
-
-check_cmd = "/etc/cont-init.d/80-nftables check"
-reload_cmd = "/etc/cont-init.d/80-nftables"

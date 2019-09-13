@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+#
+import yaml
+import os
+import ipaddress
+import random
+import subprocess
+import jinja2
+from pprint import pprint
+
+config_file = "/etc/config/config.yaml"
+
+# Services, conntrack, etc:
+services_dir = "/etc/services.d"
+templates_dir = "/etc/templates.d"
+
+# Open up jinja2 templates
+env = jinja2.Environment(loader=jinja2.FileSystemLoader(templates_dir))
+
+# Default configuration dict
+config = {
+  "rendered": {
+    "networks": {},
+    "keepalive_services": []
+  },
+  "zerotier": {
+    "api_key": "",
+    "networks": []
+  }
+}
+
+def run(cmd):
+    print("{}".format(" ".join(cmd)))
+    cpi = subprocess.run(cmd)
+    return cpi.returncode == 0
+
+def run_check(cmd):
+    print("{}".format(" ".join(cmd)))
+    subprocess.run(cmd, check=True)
+
+def ip(*args):
+  cmd = ['ip'] + list(args)
+  return run(cmd)
+
+def line_in_file(fname, needle):
+  with open(fname, "r+") as f:
+      for line in f:
+          if needle in line:
+            break
+      else: # not found, we are at the eof
+          f.write(needle) # append missing data
+
+
+def host_exists(interface, address):
+  return run(['arping', '-0', '-c', '3', '-i', interface, address])
+
+
+def dict_merge(source, destination):
+    """
+    run me with nosetests --with-doctest file.py
+
+    >>> a = { 'first' : { 'all_rows' : { 'pass' : 'dog', 'number' : '1' } } }
+    >>> b = { 'first' : { 'all_rows' : { 'fail' : 'cat', 'number' : '5' } } }
+    >>> merge(b, a) == { 'first' : { 'all_rows' : { 'pass' : 'dog', 'fail' : 'cat', 'number' : '5' } } }
+    True
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # get node or create one
+            node = destination.setdefault(key, {})
+            dict_merge(value, node)
+        else:
+            destination[key] = value
+    return destination
+
+# Network configurations defs:
+
+def configure_net_k8s(net_id, net_cfg):
+  """
+  Configure networking for dual-routing K8S and extra networks
+  """
+  ## IP Rules
+  # Generate a routing policy like this:
+  #   1:      from all table local -- (locally connected ints')
+  #   1024:    from (eth0-ip) table k8s -- for connectivity _from_ K8S 
+  #   1024:    from all to (k8s-clusterips)  table k8s -- for connectivity to internal K8S ClusterIP's
+  #   1536:    from all table main -- for connectivity provided by BGP, BIRD, DHCP if enabled
+  #   2048:    from all table k8s
+  ##
+
+  # Main table is always 254
+  main_table = "254"
+
+  # Defaults to 20
+  k8s_table = str(net_cfg.get('table', 20))
+
+  # Create the k8s table in /etc/iproute2/rt_tables
+  line_in_file('/etc/iproute2/rt_tables', f"{k8s_table}    k8s\n")
+
+  # Retrieve interface details
+  ip_addr_cmd = subprocess.run(['/usr/lib/net-functions/get-ipaddr.sh', net_id], check=True, stdout=subprocess.PIPE, text=True)
+  for addr in ip_addr_cmd.stdout.splitlines():
+    print(f"Adding {addr} rule for {net_id}")
+    run_check(['/usr/lib/net-functions/ensure-rule.sh', 'from', addr, 'lookup', k8s_table, 'pref', '1024'])
+
+  if 'k8s_subnets' in net_cfg:
+    for network in net_cfg['k8s_subnets']:
+      print(f"{net_id}: Creating rule in table {k8s_table} for {network}")
+      run_check(['/usr/lib/net-functions/ensure-rule.sh', 'to', network, 'lookup', k8s_table, 'pref', '1024'])
+
+  # First up, attempt to route using the `main` table
+  run_check(['/usr/lib/net-functions/ensure-rule.sh', 'lookup', main_table, 'pref', '1536'])
+
+  # If that fails, fallback to the k8s_table (which should have a default gw)
+  run_check(['/usr/lib/net-functions/ensure-rule.sh', 'lookup', k8s_table, 'pref', '1536'])
+
+  # Copy routing table for {net_id}
+  run_check(['/usr/lib/net-functions/copy-route-table.sh', main_table, k8s_table, 'dev', net_id])
+  
+  # Flush main table of net_id networking
+  ip('route', 'flush', 'dev', net_id)
+  
+
+
+def configure_net_service(net_id, net_cfg):
+  # Configures the dhcp service type
+  svc_name = f"net-{net_id}"
+  net_svc_dir = os.path.join(services_dir, svc_name)
+  if not os.path.isdir(net_svc_dir):
+    os.mkdir(net_svc_dir)
+  
+  # Touch the "down" file if not auto
+  if not net_cfg.get('autostart', False):
+    open(os.path.join(net_svc_dir, 'down'), 'a').close()
+
+  # Push out start/stop scripts from config
+  with open(os.path.join(net_svc_dir, 'run'), 'w') as strm:    
+    strm.write(net_cfg['service']['run_script'])
+  os.chmod(os.path.join(net_svc_dir,'run'), 750)
+  
+  if len(net_cfg['service'].get('finish_script', [])) > 0:
+    with open(os.path.join(net_svc_dir, 'finish'), 'w') as strm:
+      strm.write(net_cfg['service']['finish_script'])
+    os.chmod(os.path.join(net_svc_dir,'finish'), 750)
+
+  # Add to the start-stop callbacks on the keepalive service
+  if 'start_on_master' in net_cfg['service'] and net_cfg['service']['start_on_master'] == True:
+    config['rendered']['keepalive_services'].append(svc_name)
+
+def configure_net_ipv4ll(net_id, net_cfg):
+  print(f"Configuring IPvLL on {net_id}")
+  state = {}
+  if 'subnet' not in net_cfg:
+    raise ValueError(f"No subnet specified for {net_id}")
+
+  subnet = ipaddress.ip_network(net_cfg['subnet'], strict=True)
+  
+  # TODO: Set timeout/retry counter
+  address = subnet.network_address + random.randint(1, subnet.num_addresses - 2)
+  while host_exists(interface=net_id, address=str(address)):
+    address = subnet.network_address + random.randint(1, subnet.num_addresses - 2)
+  
+  # Should have an address by now:
+  ip('address', 'flush', 'dev', net_id)
+  ip('address', 'add', 'dev', net_id, f"{address}/{subnet.prefixlen}")
+  state['address'] = str(address)
+  state['prefixlen'] = subnet.prefixlen
+  set_state(net_id, state)
+
+def configure_net_static(net_id, net_cfg):
+  if 'address' not in net_cfg:
+    raise ValueError(f"No address specified for {net_id}")
+
+  if '/' not in net_cfg['address']:
+    raise ValueError(f"No subnet specified for {net_id}: {net_cfg['address']} (expected {net_cfg['address']}/<subnet>)")
+  
+  state = {}
+  
+  subnet = ipaddress.ip_network(net_cfg['address'], strict=False)
+  address = ipaddress.ip_address(net_cfg['address'].split('/')[0])
+
+  ip('address', 'flush', 'dev', net_id)
+  ip('address', 'add', f"{address}/{subnet.prefixlen}", 'dev', net_id)
+
+  state['address'] = str(address)
+  state['prefixlen'] = subnet.prefixlen
+  set_state(net_id, state)
+
+def configure_net_vrrp(net_id, net_cfg):
+  # Do nothing for now
+  pass
+
+# Set states
+def set_state(net_id, state):
+  global config
+  config['rendered']['networks'][net_id] = state
+
+
+
+def main():
+  # Main configuration machine:
+  reqd_keys = ['mode']
+  
+  for net_id, net_cfg in config['networks'].items():
+    for key in reqd_keys:
+      if key not in net_cfg:
+        raise ValueError(f"Required key '{key}' not found for network with ID '{net_id}'")
+
+    # Specify routing table for interface
+    #if 'table' in net_cfg:
+    #  print("tables not yet supported.")
+    #  #ip('rule', 'add', 'proto', '64', 'iif', net_id, 'table', net_cfg['table'])
+    
+    # Setup hwaddr if necessary
+    if 'hwaddr' in net_cfg:
+      ip('link', 'set', 'dev', net_id, 'state', 'down')
+      ip('link', 'set', 'dev', net_id, 'address', net_cfg['hwaddr'])
+
+    # Setup/start QOS
+    if 'qos' in net_cfg:
+      tpl = env.get_template('qos.conf')
+      tpl.stream(iface=net_id, qos=net_cfg['qos']).dump(os.path.join('/etc/sqm', f"{net_id}.iface.conf"))
+      # Start QoS
+      run(['/usr/bin/sqm', 'stop', net_id])
+      if not run(['/usr/bin/sqm', 'start', net_id]):
+        print("QoS Setup failed. Continuing...")
+      
+    # Render net_id for replication_interface
+    if 'purpose' in net_cfg and net_cfg['purpose'] == 'replication':
+      config['rendered']['replication_interface'] = net_id
+
+
+    # Switch on type
+    if net_cfg['mode'] == "service":
+      configure_net_service(net_id, net_cfg)
+    elif net_cfg['mode'] == 'ipv4ll':
+      configure_net_ipv4ll(net_id, net_cfg)
+    elif net_cfg['mode'] == 'static':
+      configure_net_static(net_id, net_cfg)
+    elif net_cfg['mode'] == 'k8s':
+      configure_net_k8s(net_id, net_cfg)
+    elif net_cfg['mode'] == 'vrrp':
+      configure_net_vrrp(net_id, net_cfg)
+    else:
+      raise ValueError(f"{net_id} mode is unsupported: {net_cfg['mode']}")
+  
+  
+  # Render configurations to configfiles:
+  for svc in config['render_services']:
+    print(f"Rendering {svc['name']}")
+    tpl = env.get_template(svc['src'])
+    tpl.stream(config=config).dump(svc['dst'])
+    if 'mode' in svc:
+      os.chmod(svc['dst'], svc['mode'])
+
+  if 'services' in config:
+    # Enabled services should not have a 'down' file
+    if 'enabled' in config['services']:
+      for svc in config['services']['enabled']:
+        down_path = os.path.join(services_dir, svc, 'down')
+        if os.path.isfile(down_path):
+          os.remove(down_path)
+      
+    # Disabled services should have their 'down' file removed
+    if 'disabled' in config['services']:
+      for svc in config['services']['disabled']:
+        down_path = os.path.join(services_dir, svc, 'down')
+        if os.path.isdir(os.path.join(services_dir, svc)):
+          open(down_path, 'a').close()
+      
+
+if __name__ == '__main__':
+  # Load config
+  with open(config_file, 'r') as strm:
+    loaded_config = yaml.safe_load(strm)
+
+  # Merge default with loaded
+  dict_merge(loaded_config, config)
+  main()

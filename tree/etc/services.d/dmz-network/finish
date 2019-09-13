@@ -1,6 +1,0 @@
-#!/bin/sh
-#
-. /run/network/dmz-config
-
-ip ad flush dev "$INTERFACE"
-ip li set dev "$INTERFACE" state down

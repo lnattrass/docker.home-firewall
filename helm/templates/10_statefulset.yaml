@@ -7,28 +7,29 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   serviceName: {{ .Release.Name }}
-  replicas: 2
+  replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Release.Name }}
   template:
     metadata:
       annotations: 
-      {{- if .Values.networks }}
-        k8s.v1.cni.cncf.io/networks: {{ .Values.networks | toJson | quote }}
-      {{- else }}
-        {}
-      {{- end }}
+        {{ .Values.annotations | toYaml | indent 8 | trim }}
+        {{- if .Values.networks }}
+        k8s.v1.cni.cncf.io/networks: {{ .Values.networks | toJson | quote }}{{ end }}
+
       labels:
         app.kubernetes.io/name: {{ .Release.Name }}
     spec:
       restartPolicy: Always
-      
       {{- if .Values.node_selector }}
       nodeSelector:
         {{ .Values.node_selector | toYaml | indent 8 | trim }}
       {{- end }}
-      
+      volumes:
+      - name: config
+        configMap:
+          name: {{ .Release.Name }}-config
       securityContext:
         sysctls:
         - name: net.ipv4.ip_forward
@@ -37,11 +38,20 @@ spec:
       containers:
       - image: "{{ .Values.image }}"
         imagePullPolicy: "{{ .Values.image_pull_policy }}"
-        name: firewall
+        name: {{ .Release.Name }}-firewall
+        env:
+        - name: CONFIG_SHA
+          value: "{{ if .Values.rollout_on_config }}{{ .Values.config | toYaml | sha256sum }}{{else}}NA{{end}}"
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /usr/bin/lifecycle
+              - shutdown
         readinessProbe:
           exec:
             command:
-            - /usr/local/bin/gate
+            - /usr/bin/lifecycle
             - ready
           initialDelaySeconds: 10
           periodSeconds: 5
@@ -51,9 +61,7 @@ spec:
           capabilities:
             add: ["NET_ADMIN"]
         volumeMounts:
-        - name: {{ .Release.Name }}-config
+        - name: config
           mountPath: /etc/config
-        - name: dev-net-tun
-          mountPath: /dev/net/tun
         resources:
 {{ toYaml .Values.resources | indent 10 }}

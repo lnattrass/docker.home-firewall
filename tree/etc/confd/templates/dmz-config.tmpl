@@ -1,8 +1,22 @@
-#!/bin/sh -e
+#!/bin/sh
 #
-# 
 
-INTERFACE="{{ getv "/network/dmz/interface"}}"
-HWADDR="{{ getv "/network/dmz/static_mac"}}"
-DHCP_HOSTNAME="{{ getv "/network/dmz/dhcp_hostname"}}"
+INTERFACE="{{ getv "/dmz/interface"}}"
+HWADDR="{{ getv "/dmz/static_mac"}}"
+DHCP_HOSTNAME="{{ getv "/dmz/dhcp_hostname"}}"
 
+{{ if getv "/dmz/qos/enabled" "" }}
+# QoS config:
+# Uplink and Downlink values are in kbps
+UPLINK="{{ getv "/dmz/qos/bandwidth/up" }}"
+DOWNLINK="{{ getv "/dmz/qos/bandwidth/down" }}"
+
+# SQM recipe to use. For more information, see /usr/lib/sqm/*.help
+SCRIPT="{{ getv "/dmz/qos/script" }}" 
+
+# Optional/advanced config
+
+#ENABLED=1
+QDISC="{{ getv "/dmz/qos/qdisc" "cake" }}"
+DEV="{{ getv "/dmz/qos/dev" "ifb0" }}"
+{{end}}

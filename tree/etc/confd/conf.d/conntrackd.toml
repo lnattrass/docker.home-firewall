@@ -1,8 +1,0 @@
-[template]
-src = "conntrackd.conf.tmpl"
-dest = "/etc/conntrackd/conntrackd.conf"
-keys = [
-  "/"
-]
-#check_cmd = "/usr/sbin/nginx -t -c {{.src}}"
-#reload_cmd = "/usr/sbin/service nginx reload"

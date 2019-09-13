@@ -1,7 +1,0 @@
-[template]
-src = "dhcrelay.conf.tmpl"
-dest = "/etc/dhcp/dhcrelay.conf"
-keys = [
-  "/dhcp_helper"
-]
-reload_cmd = "/bin/s6-svc -wr -r /run/s6/services/dhcp-relay"

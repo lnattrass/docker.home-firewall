@@ -1,5 +1,0 @@
-#!/bin/bash
-#
-
-# No K8S routing for these instances:
-ip route flush dev eth0

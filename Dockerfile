@@ -1,37 +1,51 @@
+ARG NFT_BUILD
+
+FROM ${NFT_BUILD} AS NFT_BUILD
 FROM lnattrass/alpine-base:latest
 
+# Manual build of nft with --json suport
+COPY --from=NFT_BUILD /root/packages/src/x86_64/*.apk /tmp/packages/
+COPY --from=NFT_BUILD /root/.abuild/*.pub /etc/apk/keys/
+
 RUN apk add --no-cache --update \
+      /tmp/packages/* \
       bash \
+      jq \
+      python3 \
+      py3-yaml \
+      py3-jinja2 \
+      py3-requests \
       ca-certificates \
-      nftables \
       conntrack-tools \
       iproute2 \
+      iproute2-doc \
+      man \
       keepalived \
       curl \
       dhcp \
       dhcpcd \
       dhcrelay \
-      ifupdown \
       tcpdump \
       vim \
       whois \
       wget \
       mtr \
       socat \
+      arping \
+      darkhttpd \
       less 
 
-RUN echo '@testing http://dl-cdn.alpinelinux.org/alpine/edge/testing/' >> /etc/apk/repositories \
-    && apk add --no-cache --update bird@testing \
-    # yq for bash-inline-yaml stuff:
-    && wget -O /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/2.4.0/yq_linux_amd64" \
-    && chmod +x /usr/local/bin/yq \
-    # confd for templating:
-    && wget -O /usr/local/bin/confd https://github.com/kelseyhightower/confd/releases/download/v0.16.0/confd-0.16.0-linux-amd64 \
-    && chmod +x /usr/local/bin/confd \
-    # zerotier for vpn
-    && wget -O /usr/local/bin/zerotier-one.gz https://download.zerotier.com/dist/static-binaries/zerotier-one.x86_64.gz\
-    && gzip -d /usr/local/bin/zerotier-one.gz && chmod +x /usr/local/bin/zerotier-one \
-    && ln -sf /usr/local/bin/zerotier-one /usr/local/bin/zerotier-cli
+RUN \
+    # nftables_exporter
+    wget -O /usr/bin/nftables_collector https://raw.githubusercontent.com/lnattrass/prometheus-nftables-collector/master/collector.py \
+    && chmod +x /usr/bin/nftables_collector \
+    # zerotier
+    && wget -O /usr/bin/zerotier-one.gz https://download.zerotier.com/dist/static-binaries/zerotier-one.x86_64.gz \
+    && gzip -d /usr/bin/zerotier-one.gz && chmod +x /usr/bin/zerotier-one \
+    && ln -sf /usr/bin/zerotier-one /usr/bin/zerotier-cli 
+
+ENV S6_BEHAVIOUR_IF_STAGE2_FAILS 2
 
 # Install components:
 ADD tree/ /
+

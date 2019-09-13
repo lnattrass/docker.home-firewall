@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+
+mkdir -p /var/www
+
+while true; do
+  nftables_collector > /var/www/metrics.tmp 2> /dev/null
+  mv /var/www/metrics.tmp /var/www/metrics
+  sleep 5
+done

@@ -1,7 +1,0 @@
-#!/bin/sh
-. /run/network/dmz-config
-
-ip li set dev "$INTERFACE" address "$HWADDR"
-
-exec dhcpcd -B -C resolv.conf -h $DHCP_HOSTNAME -I $HWADDR $INTERFACE
-

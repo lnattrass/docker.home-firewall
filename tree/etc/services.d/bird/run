@@ -1,5 +1,4 @@
 #!/bin/bash
 #
-set -ex
 
-exec bird -f 
+exec /usr/bin/bird -c /etc/bird.conf -f

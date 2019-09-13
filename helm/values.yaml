@@ -1,79 +1,182 @@
-image: local-registry.svc/lnattrass/firewall:latest
+image: lnattrass/firewall:latest
 image_pull_policy: Always
+
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9630"
+
+replicas: 2
+rollout_on_config: True
+
+nodeSelector: {}
+#
 
 resources:
   requests:
-    cpu: 500m
+    cpu: 100m
   limits:
     cpu: 1000m
     memory: 512Mi
 
 networks:
-- name: virbr0
+- name: dmz
   namespace: networks
-  interface: nic1
-
-services:
-  enabled: []
-  disabled: []
-
-config:
-  # These are located in a YAML file because they are used across multiple services
-  # Network config
-  network:
-    replication:
-      interface: n-replication
-      subnet: 10.168.100.0/24
-
-    dmz:
-      interface: n-dmz
-      static_mac: "e1:ee:ee:95:c9:f9"
-      dhcp_hostname: "router"
-      qos: 
-        script: layer-cake.qos
-        qdisc: cake
-        dev: ifb0
-        bandwidth:
-          down: 40000
-          up: 40000
+  interface: eth1
+#- name: clients
+#  namespace: networks
+#  interface: eth2
+#- name: guests
+#  namespace: networks
+#  interface: eth3
+#- name: replication
+#  namespace: networks
+#  interface: eth4
+#- name: peering
+#  namespace: networks
+#  interface: eth5
 
 
-  virtual_ipaddress:
-    - 192.168.1.1/24 dev n-home
-    - 192.168.2.1/24 dev n-guest
-
-  dhcp_helper:
-    # DHCP Server Side (upstream)
-    upstream:
-      addresses:
-      - 192.168.1.2
-      interfaces: 
-      - "n-home"
-
-    # DHCP Clients Side (downstream)
-    downstream:
-      interfaces:
-      - "n-guest"
-
-  zerotier:
-    api_key: None
-    networks: []
-
-nftables: |
-  flush ruleset
-  table ip filter {
-    chain INPUT {
-    type filter hook input priority 0; policy drop;
-    }
+config: {}
+  # # services:
+  # #  enabled:
+  # #  - zerotier
+  # #  disabled:
+  # #  - nftables_exporter
   
-    chain FORWARD {
-    type filter hook forward priority 0; policy drop;
-    }
-  
-    chain OUTPUT {
-    type filter hook output priority 0; policy accept;
-    }
-  }
+  # render_services:
+  #   - name: conntrackd
+  #     src: conntrackd.conf
+  #     dst: "/etc/conntrackd/conntrackd.conf"
 
-bird: |
-  # Bird config if you want it?
+  #   - name: keepalived
+  #     src: keepalived.conf
+  #     dst: "/etc/keepalived/keepalived.conf"
+
+  #   - name: dhcrelay
+  #     src: dhcrelay.conf
+  #     dst: "/etc/dhcp/dhcrelay.conf"
+
+  #   - name: bird
+  #     src: bird.conf
+  #     dst: "/etc/bird.conf"
+
+  #   - name: keepalived-services
+  #     src: keepalived-services.conf
+  #     dst: "/run/keepalived-services.conf"
+    
+  #   - name: zerotier
+  #     src: zerotier.conf
+  #     dst: /etc/zerotier.conf
+
+  # networks: {}
+  #   # eth0:
+  #   #   mode: k8s
+  #   #   k8s_subnets:
+  #   #   - 10.96.0.0/12
+
+  #   # eth1:
+  #   #   mode: service
+  #   #   hwaddr: "6e:9e:4f:05:c9:f9"
+  #   #   service:
+  #   #     autostart: false
+  #   #     start_on_master: true
+  #   #     run_script: |
+  #   #       #!/bin/sh
+  #   #       ip ad flush dev eth1
+  #   #       exec dhcpcd -B -C resolv.conf -h router eth1
+  #   #     finish_script: |
+  #   #       #!/bin/sh
+  #   #       ip ad flush dev eth1
+  #   #       ip li set dev eth1 state down
+
+  #   #   qos:
+  #   #     script: layer_cake.qos
+  #   #     qdisc: cake
+  #   #     bandwidth:
+  #   #       down: 300000
+  #   #       up: 300000
+    
+  #   # eth2:
+  #   #   mode: vrrp
+  #   #   address: 192.168.0.1/24
+    
+  #   # eth3:
+  #   #   mode: vrrp
+  #   #   address: 192.168.1.1/24
+
+  #   # eth4:
+  #   #   mode: vrrp
+  #   #   address: 192.168.192.1/24
+    
+  #   # # Use a generated address here - we use multicast for replicating state
+  #   # eth5:
+  #   #   mode: ipv4ll
+  #   #   subnet: 192.168.192.0/29
+  #   #   purpose: replication
+
+  # bgp:
+  #   global:
+  #     router-id: 192.168.192.1
+  #   neighbors:
+  #     - name: peering
+  #       config: |
+  #         local as 64512;
+  #         neighbor range 192.168.192.0/24 as 64512;
+  #         rr client;
+  #         graceful restart;
+  #         ipv4 {
+  #           import all;
+  #           export all;
+  #         };
+  #     - name: calico
+  #       config: |
+  #         local as 64512;
+  #         neighbor range 192.168.0.0/16 as 64512;
+  #         rr client;
+  #         graceful restart;
+  #         multihop;
+  #         ipv4 {
+  #           import all;
+  #           export where source = RTS_BGP;
+  #         };
+  #   extra_config: |
+  #     filter reject_local_nets {
+  #       if (net ~ [10.123.0.0/24, 10.121.0.0/24]) then {
+  #         reject;
+  #       }
+  #       accept;
+  #     }
+
+  # zerotier:
+  #   api_key: ""
+  #   networks: []
+
+  # dhcp_helper:
+  #   # DHCP Server Side (upstream)
+  #   upstream:
+  #     addresses:
+  #     - 192.168.0.2
+  #     interfaces: 
+  #     - "eth2"
+
+  #   # DHCP Clients Side (downstream)
+  #   downstream:
+  #     interfaces:
+  #     - "eth3"
+
+additional_config:
+  nftables.conf: |
+    flush ruleset
+    table ip filter {
+      chain INPUT {
+      type filter hook input priority 0; policy drop;
+      }
+    
+      chain FORWARD {
+      type filter hook forward priority 0; policy drop;
+      }
+    
+      chain OUTPUT {
+      type filter hook output priority 0; policy accept;
+      }
+    }

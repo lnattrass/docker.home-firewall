@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+
+case "$1" in
+  ready)
+    SERVICES=""
+    for svc in /run/s6/services/*; do
+      s6-svstat -w $svc | grep -q 'true' && SERVICES="$SERVICES $svc"
+    done
+    for svc in $SERVICES; do
+      STATE=$(s6-svstat -ut $svc | grep 'true')
+      if [ $? -ne 0 ]; then
+        echo "$svc is not running and should be..."
+        exit 1
+      else
+        SINCE=$(echo $STATE| cut -f2 -d\ )
+        if [ $SINCE -gt 10 ]; then
+          echo "$svc is ok."
+        else
+          echo "$svc only up for ${SINCE}s"
+          exit 1
+        fi
+      fi
+    done
+    exit 0
+  ;;
+
+  healthy)
+    exit 0  
+  ;;
+
+  shutdown)
+    ip link set katrack0 down
+    sleep 5
+    s6-svscanctl -t /var/run/s6/services
+    exit 0
+  ;;
+  
+esac
