@@ -11,6 +11,8 @@ rollout_on_config: True
 nodeSelector: {}
 #
 
+tolerations: {}
+
 resources:
   requests:
     cpu: 100m

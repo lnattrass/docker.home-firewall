@@ -22,6 +22,7 @@ spec:
         app.kubernetes.io/name: {{ .Release.Name }}
     spec:
       restartPolicy: Always
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
       {{- if .Values.node_selector }}
       nodeSelector:
         {{ .Values.node_selector | toYaml | indent 8 | trim }}
